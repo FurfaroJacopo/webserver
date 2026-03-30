@@ -64,21 +64,31 @@ int main()
     while (1)
     {
         struct sockaddr_in clientAddr;
-        socklen_t clientlen = sizeof clientAddr ;
-    int clientSocket;
+        socklen_t clientlen = sizeof clientAddr;
+    	int clientSocket;
         if((clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientlen)) < 0) {
 
             perror("could not accept client");
             continue;
         }
-
-        printf("client connected\n");
-  
-        sendHTML(clientSocket, "html/index.html");
-        close(clientSocket);
-        printf("client out\n");
+	char recBuf[BUFFER_SIZE] = {0};
+	recv(clientSocket, recBuf, BUFFER_SIZE, 0);
+	printf("%s\n", recBuf);
+	char* token = recBuf + 5; // saltino da GET alla route manipolando l'output della rechiesta http;
+	char* route = strtok(token, " ");
+	printf("client connected\n");
+	if (!fork()) { // this is the child process
+            
+            sendHTML(clientSocket,"html/index.html");
+	    close(clientSocket);
+    	    close(sockfd);	    
+	    printf("client out\n");
+	    exit(0);
     }
-    close(sockfd);
+	close(clientSocket);
+    	
+    
+    }
     
     return 0;
 }
