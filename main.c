@@ -76,10 +76,13 @@ int main()
 	printf("%s\n", recBuf);
 	char* token = recBuf + 5; // saltino da GET alla route manipolando l'output della rechiesta http;
 	char* route = strtok(token, " ");
+	char htmlDir[] = "html/";
+	char* finalroute = strcat(htmlDir, route);
+	printf("%s\n", finalroute);
 	printf("client connected\n");
 	if (!fork()) { // this is the child process
             
-            sendHTML(clientSocket,"html/index.html");
+            sendHTML(clientSocket,finalroute);
 	    close(clientSocket);
     	    close(sockfd);	    
 	    printf("client out\n");
@@ -89,6 +92,6 @@ int main()
     	
     
     }
-    
+    close(sockfd);
     return 0;
 }
