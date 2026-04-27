@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+    }
+
+    .matrix {
+      display: grid;
+      width: 100vw;
+      height: 100vh;
+
+      /* Auto-create as many columns as fit */
+      grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+      grid-auto-rows: 60px;
+    }
+
+    .cell {
+      border: 1px solid black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+<div class="matrix" id="matrix"></div>
+
+<script>
+  const matrix = document.getElementById("matrix");
+
+  // Estimate number of cells based on screen size
+  const cellSize = 60;
+  const cols = Math.floor(window.innerWidth / cellSize);
+  const rows = Math.floor(window.innerHeight / cellSize);
+
+  for (let i = 0; i < rows * cols; i++) {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.textContent = i + 1;
+    matrix.appendChild(cell);
+  }
+</script>
+
+</body>
+</html>

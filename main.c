@@ -11,8 +11,18 @@
 #define PORT 6767
 #define BUFFER_SIZE 1024
 #define BACKLOG 10
+#define ROOT "root/"
 
+char* string_append(char* string1, char* string2) {
+    int len1 = strlen(string1);
+    int len2 = strlen(string2);
+    int final_len = len1+len2+1;
+    char* final_str = calloc(final_len, sizeof(char));
+}
 void sendHTML(int sock, char *file) {
+    if(strcmp(file, ROOT) == 0) {
+        file = strcat(ROOT, "index.html");
+    }
     FILE *html = fopen(file, "r");
     if(!html) {
         perror("couldnt open html file");
@@ -71,27 +81,30 @@ int main()
             perror("could not accept client");
             continue;
         }
-	char recBuf[BUFFER_SIZE] = {0};
-	recv(clientSocket, recBuf, BUFFER_SIZE, 0);
-	printf("%s\n", recBuf);
-	char* token = recBuf + 5; // saltino da GET alla route manipolando l'output della rechiesta http;
-	char* route = strtok(token, " ");
-	char htmlDir[] = "html/";
-	char* finalroute = strcat(htmlDir, route);
-	printf("%s\n", finalroute);
-	printf("client connected\n");
-	if (!fork()) { // this is the child process
+	        char recBuf[BUFFER_SIZE] = {0};
+	        recv(clientSocket, recBuf, BUFFER_SIZE, 0);
+	        printf("%s\n", recBuf);
+	        char* token = recBuf + 4; // saltino da GET alla route manipolando l'output della rechiesta http;
+	        char* route = strtok(token, " ");
+            printf("route: %s\n", route);
+	        char htmlDir[] = ROOT;
+	        char* finalroute = strcat(htmlDir, route);
+	        printf("fr: %s\n", finalroute);
+	        printf("client connected\n");
+	        if (!fork()) { // this is the child process
             
-            sendHTML(clientSocket,finalroute);
-	    close(clientSocket);
-    	    close(sockfd);	    
-	    printf("client out\n");
-	    exit(0);
-    }
+                sendHTML(clientSocket,finalroute);
+	            close(clientSocket);
+    	        close(sockfd);	    
+	            printf("client out\n");
+	            exit(0);
+            }
 	close(clientSocket);
+    clientSocket = -1;
     	
     
     }
     close(sockfd);
+    sockfd = -1;
     return 0;
 }
