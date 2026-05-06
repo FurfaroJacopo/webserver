@@ -66,7 +66,7 @@ if((access(file,R_OK))==0) {
 }
     send(sock, header, strlen(header),0);
     FILE *html = fopen(file, "r");
-    
+    if (!html) return;
 
     while ((read = fread(buffer,sizeof(buffer[0]), BUFFER_SIZE, html)) > 0) {
         send(sock, buffer, read, 0);
@@ -99,11 +99,12 @@ void start_worker(int sockfd) {
 	        if (!fork()) { // this is the child process
             
                 sendHTML(clientSocket,finalroute);
-	           close(clientSocket);
     	        close(sockfd);	    
 	            printf("client out\n");
 	            exit(0);
              }
+                 close(clientSocket);
+             free(finalroute);
            
     }
 }
