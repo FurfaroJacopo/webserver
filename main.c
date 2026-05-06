@@ -10,11 +10,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <pthread.h>
 
 #define PORT 6767
 #define BUFFER_SIZE 1024
 #define BACKLOG 10
 #define ROOT "root"
+#define NUM_WORKERS 5
+
 
 void handle_sigchld(int sig) {
     (void)sig; // Suppress unused parameter warning
@@ -32,30 +37,75 @@ char* string_append(char* string1, char* string2) {
     return final_str;
 }
 void sendHTML(int sock, char *file) {
+    size_t read; //size_t è un unsigned integer che viene usato com return type di size of e che sarà quindi sempre positivo
+    char buffer[BUFFER_SIZE] = {0};
+    char* header;
+if((access(file,R_OK))==0) {
     if(strcmp(file, "root/favicon.ico") == 0) {
         file = "public/favicon.ico";
     }
     if(strcmp(file, string_append(ROOT,"/")) == 0) {
         file = string_append(ROOT, "/index.html");
-        printf("setp: %s\n", file);
-    }
-    FILE *html = fopen(file, "r");
-    if(!html) {
-        
-        html = fopen("public/404.html", "r");
     }
 
-    size_t read; //size_t è un unsigned integer che viene usato com return type di size of e che sarà quindi sempre positivo
-    char buffer[BUFFER_SIZE] = {0};
     
-    char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
+     header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
+    
+} else {
+    if(errno == ENOENT) {
+        file = "public/404.html";
+        header = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
+
+    } 
+    else if(errno ==  EACCES) {
+        file = "public/403.html";
+         header = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
+
+    }
+    
+}
     send(sock, header, strlen(header),0);
+    FILE *html = fopen(file, "r");
+    
 
     while ((read = fread(buffer,sizeof(buffer[0]), BUFFER_SIZE, html)) > 0) {
         send(sock, buffer, read, 0);
     }
   
     fclose(html);
+}
+
+void start_worker(int sockfd) {
+    while (1)
+    {
+        struct sockaddr_in clientAddr;
+        socklen_t clientlen = sizeof clientAddr;
+    	int clientSocket;
+        if((clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientlen)) < 0) {
+
+            perror("could not accept client");
+            continue;
+        }
+	        char recBuf[BUFFER_SIZE] = {0};
+	        recv(clientSocket, recBuf, BUFFER_SIZE, 0);
+	        printf("%s\n", recBuf);
+	        char* token = recBuf + 4; // saltino da GET alla route manipolando l'output della rechiesta http;
+	        char* route = strtok(token, " ");
+            printf("route: %s\n", route);
+	        char htmlDir[] = ROOT;
+	        char* finalroute = string_append(htmlDir, route);
+	        printf("fr: %s\n", finalroute);
+	        printf("client connected\n");
+	        if (!fork()) { // this is the child process
+            
+                sendHTML(clientSocket,finalroute);
+	           close(clientSocket);
+    	        close(sockfd);	    
+	            printf("client out\n");
+	            exit(0);
+             }
+           
+    }
 }
 int main()
 {
@@ -90,38 +140,15 @@ int main()
 
     printf("listening on port %d\n", PORT);
 signal(SIGCHLD, handle_sigchld);
-    while (1)
-    {
-        struct sockaddr_in clientAddr;
-        socklen_t clientlen = sizeof clientAddr;
-    	int clientSocket;
-        if((clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientlen)) < 0) {
-
-            perror("could not accept client");
-            continue;
+    for(int i=0 ; i<NUM_WORKERS; i++) {
+        pid_t pid = fork();
+        if(pid==0) {
+            start_worker(sockfd);
+            exit(0);
         }
-	        char recBuf[BUFFER_SIZE] = {0};
-	        recv(clientSocket, recBuf, BUFFER_SIZE, 0);
-	        printf("%s\n", recBuf);
-	        char* token = recBuf + 4; // saltino da GET alla route manipolando l'output della rechiesta http;
-	        char* route = strtok(token, " ");
-            printf("route: %s\n", route);
-	        char htmlDir[] = ROOT;
-	        char* finalroute = strcat(htmlDir, route);
-	        printf("fr: %s\n", finalroute);
-	        printf("client connected\n");
-	        if (!fork()) { // this is the child process
-            
-                sendHTML(clientSocket,finalroute);
-	            close(clientSocket);
-    	        close(sockfd);	    
-	            printf("client out\n");
-	            exit(0);
-            }
-	close(clientSocket);
-    clientSocket = -1;
-    	
-    
+    }
+    while(1) {
+        pause(); // Wait for signals
     }
     close(sockfd);
     sockfd = -1;
