@@ -7,26 +7,42 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 #define PORT 6767
 #define BUFFER_SIZE 1024
 #define BACKLOG 10
-#define ROOT "root/"
+#define ROOT "root"
 
+void handle_sigchld(int sig) {
+    (void)sig; // Suppress unused parameter warning
+    while (waitpid(-1, NULL, WNOHANG) > 0) {
+        // Reap all terminated child processes
+    }
+}
 char* string_append(char* string1, char* string2) {
     int len1 = strlen(string1);
     int len2 = strlen(string2);
     int final_len = len1+len2+1;
-    char* final_str = calloc(final_len, sizeof(char));
+    char* final_str = (char*)calloc(final_len, sizeof(char));
+   strcpy(final_str,string1);
+   strcat(final_str,string2);
+    return final_str;
 }
 void sendHTML(int sock, char *file) {
-    if(strcmp(file, ROOT) == 0) {
-        file = strcat(ROOT, "index.html");
+    if(strcmp(file, "root/favicon.ico") == 0) {
+        file = "public/favicon.ico";
+    }
+    if(strcmp(file, string_append(ROOT,"/")) == 0) {
+        file = string_append(ROOT, "/index.html");
+        printf("setp: %s\n", file);
     }
     FILE *html = fopen(file, "r");
     if(!html) {
-        perror("couldnt open html file");
-        return;
+        
+        html = fopen("public/404.html", "r");
     }
 
     size_t read; //size_t è un unsigned integer che viene usato com return type di size of e che sarà quindi sempre positivo
@@ -43,12 +59,15 @@ void sendHTML(int sock, char *file) {
 }
 int main()
 {
-    int sockfd, send_sock;
+    int sockfd;
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {   // AF_INET: IPV4, SOCK_STREAM: TCP, 0: protocol already set by sockstream
     // socket() create the socket endpoint 
         perror("couldnt get socket fd"); //print into stderror
         return -1;
-    } 
+    }
+    const int enable = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+    perror("setsockopt(SO_REUSEADDR) failed"); 
 
     struct sockaddr_in socketAddrIn;
     memset(&socketAddrIn, 0, sizeof(socketAddrIn)); 
@@ -70,7 +89,7 @@ int main()
     }
 
     printf("listening on port %d\n", PORT);
-
+signal(SIGCHLD, handle_sigchld);
     while (1)
     {
         struct sockaddr_in clientAddr;
