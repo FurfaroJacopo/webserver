@@ -92,19 +92,16 @@ void start_worker(int sockfd) {
 	        char* token = recBuf + 4; // saltino da GET alla route manipolando l'output della rechiesta http;
 	        char* route = strtok(token, " ");
             printf("route: %s\n", route);
-	        char htmlDir[] = ROOT;
-	        char* finalroute = string_append(htmlDir, route);
-	        printf("fr: %s\n", finalroute);
 	        printf("client connected\n");
 	        if (!fork()) { // this is the child process
             
-                sendHTML(clientSocket,finalroute);
+                sendHTML(clientSocket,string_append(ROOT,route));
     	        close(sockfd);	    
 	            printf("client out\n");
 	            exit(0);
              }
                  close(clientSocket);
-             free(finalroute);
+
            
     }
 }
