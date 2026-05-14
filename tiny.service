@@ -1,0 +1,7 @@
+[Unit]
+Description=Tiny
+
+[Service]
+ExecStart=/usr/local/bin/tiny --daemon
+[Install]
+WantedBy=multi-user.target
