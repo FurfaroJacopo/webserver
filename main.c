@@ -13,20 +13,13 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <pthread.h>
+#include <time.h>
 
-#define PORT 6767
+#define PORT 8080
 #define BUFFER_SIZE 1024
 #define BACKLOG 10
 #define ROOT "root"
 #define NUM_WORKERS 5
-
-
-void handle_sigchld(int sig) {
-    (void)sig; // Suppress unused parameter warning
-    while (waitpid(-1, NULL, WNOHANG) > 0) {
-        // Reap all terminated child processes
-    }
-}
 char* string_append(char* string1, char* string2) {
     int len1 = strlen(string1);
     int len2 = strlen(string2);
@@ -36,6 +29,37 @@ char* string_append(char* string1, char* string2) {
    strcat(final_str,string2);
     return final_str;
 }
+char* resolve_ext(char* content) {
+    printf("IL MIO EXT: %s\n", content);
+    if(strncmp("text/html",content, sizeof(content)) == 0) {
+        return ".html";
+    } else if(strncmp("application/json",content, sizeof(content))==0) {
+        return ".json";
+    } else return ".txt";
+}
+void resolve_put(char* body, char* content_type) {
+    time_t currentTime;
+    time(&currentTime);
+    char* ext = resolve_ext(content_type);
+
+    FILE * pFile;
+    char *filename =string_append(ctime(&currentTime),ext);
+    filename = string_append("/",filename);
+    filename = string_append(ROOT,filename);
+    pFile = fopen (filename,"w");
+  if (pFile!=NULL)
+  {
+    fputs (body,pFile);
+    fclose (pFile);
+  } else perror("file error\n\r");
+}
+void handle_sigchld(int sig) {
+    (void)sig; // Suppress unused parameter warning
+    while (waitpid(-1, NULL, WNOHANG) > 0) {
+        // Reap all terminated child processes
+    }
+}
+
 void sendHTML(int sock, char *file) {
     size_t read; //size_t è un unsigned integer che viene usato com return type di size of e che sarà quindi sempre positivo
     char buffer[BUFFER_SIZE] = {0};
@@ -88,25 +112,47 @@ void start_worker(int sockfd) {
         }
 	        char recBuf[BUFFER_SIZE] = {0};
 	        recv(clientSocket, recBuf, BUFFER_SIZE, 0);
-	        printf("%s\n", recBuf);
-	        char* token = recBuf + 4; // saltino da GET alla route manipolando l'output della rechiesta http;
-	        char* route = strtok(token, " ");
+            char* recBuf_copy = malloc(sizeof(recBuf));
+            memcpy(recBuf_copy,recBuf,sizeof(recBuf));
+            printf("rec: %s\n", recBuf_copy);
+	        char* method = strtok(recBuf_copy, " ");
+	        char* route = strtok(NULL, " ");
+            char* http_ver = strtok(NULL, " \n");
+            strtok(NULL,"\n");
+            strtok(NULL,"\n");
+            strtok(NULL,"\n");
+            strtok(NULL, " ");
+            char* content = strtok(NULL, "\n");
+            printf("method: %s\n", method);
             printf("route: %s\n", route);
+            printf("http version: %s\n", http_ver);
+            printf("content: %s\n", content);
+	        char htmlDir[] = ROOT;
+	        char* finalroute = string_append(htmlDir, route);
+	        printf("fr: %s\n", finalroute);
 	        printf("client connected\n");
 	        if (!fork()) { // this is the child process
-            
-                sendHTML(clientSocket,string_append(ROOT,route));
+                if(strcmp(method, "GET") == 0) {
+                    sendHTML(clientSocket,finalroute);
+                } else if(strcmp(method, "PUT")==0) {
+                    const char *header_end_marker = "\r\n\r\n";
+                    char *body_start = strstr(recBuf, header_end_marker);
+                    resolve_put(body_start,content);
+                }
     	        close(sockfd);	    
 	            printf("client out\n");
 	            exit(0);
              }
                  close(clientSocket);
-
+             free(finalroute);
            
     }
 }
 int main()
 {
+    
+
+
     int sockfd;
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {   // AF_INET: IPV4, SOCK_STREAM: TCP, 0: protocol already set by sockstream
     // socket() create the socket endpoint 
@@ -137,7 +183,7 @@ int main()
     }
 
     printf("listening on port %d\n", PORT);
-signal(SIGCHLD, handle_sigchld);
+    signal(SIGCHLD, handle_sigchld);
     for(int i=0 ; i<NUM_WORKERS; i++) {
         pid_t pid = fork();
         if(pid==0) {
