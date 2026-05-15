@@ -30,26 +30,30 @@ char* string_append(char* string1, char* string2) {
     return final_str;
 }
 char* resolve_ext(char* content) {
-    printf("IL MIO EXT: %s\n", content);
     if(strncmp("text/html",content, sizeof(content)) == 0) {
         return ".html";
     } else if(strncmp("application/json",content, sizeof(content))==0) {
         return ".json";
     } else return ".txt";
 }
-void resolve_put(char* body, char* content_type) {
+void resolve_put(char* body, char* content_type, int sock, char* len) {
     time_t currentTime;
     time(&currentTime);
     char* ext = resolve_ext(content_type);
-
     FILE * pFile;
     char *filename =string_append(ctime(&currentTime),ext);
     filename = string_append("/",filename);
     filename = string_append(ROOT,filename);
+    	char*  header = string_append("HTTP/1.1 201 Created\r\nContent-Location: ", filename);
+    	header = string_append(header,"Content-Length: ");
+    	header = string_append(header, len);
+    	header = string_append(header, "\r\n"); //http header to signal html
+	
     pFile = fopen (filename,"w");
   if (pFile!=NULL)
   {
     fputs (body,pFile);
+    send(sock, header, strlen(header),0);
     fclose (pFile);
   } else perror("file error\n\r");
 }
@@ -122,7 +126,8 @@ void start_worker(int sockfd) {
             strtok(NULL,"\n");
             strtok(NULL,"\n");
             strtok(NULL, " ");
-            char* content = strtok(NULL, "\n");
+            char* content = strtok(NULL, "\n");            
+            char* len = strtok(NULL, "\n");
             printf("method: %s\n", method);
             printf("route: %s\n", route);
             printf("http version: %s\n", http_ver);
@@ -137,7 +142,7 @@ void start_worker(int sockfd) {
                 } else if(strcmp(method, "PUT")==0) {
                     const char *header_end_marker = "\r\n\r\n";
                     char *body_start = strstr(recBuf, header_end_marker);
-                    resolve_put(body_start,content);
+                    resolve_put(body_start,content,clientSocket, len);
                 }
     	        close(sockfd);	    
 	            printf("client out\n");
