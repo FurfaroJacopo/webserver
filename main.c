@@ -16,23 +16,30 @@
 #include <time.h>
 
 #define PORT 8080
-#define BUFFER_SIZE 1024
-#define BACKLOG 10
+#define BUFFER_SIZE 64000
+#define BACKLOG 1024
 #define ROOT "root"
 #define NUM_WORKERS 5
+#define MAX_REQUESTS 500
 char* string_append(char* string1, char* string2) {
     int len1 = strlen(string1);
     int len2 = strlen(string2);
     int final_len = len1+len2+1;
     char* final_str = (char*)calloc(final_len, sizeof(char));
-   strcpy(final_str,string1);
+    if (!final_str) return NULL;
+    strcpy(final_str,string1);
    strcat(final_str,string2);
     return final_str;
 }
 char* resolve_ext(char* content) {
+<<<<<<< HEAD
     if(strncmp("text/html",content, sizeof(content)) == 0) {
+=======
+    printf("IL MIO EXT: %s\n", content);
+    if(strncmp("text/html",content, 9) == 0) {
+>>>>>>> 80e8bbb (Add main binary and JSON response file; update server configuration and request handling)
         return ".html";
-    } else if(strncmp("application/json",content, sizeof(content))==0) {
+    } else if(strncmp("application/json",content, 16)==0) {
         return ".json";
     } else return ".txt";
 }
@@ -56,6 +63,8 @@ void resolve_put(char* body, char* content_type, int sock, char* len) {
     send(sock, header, strlen(header),0);
     fclose (pFile);
   } else perror("file error\n\r");
+
+  free(filename);
 }
 void handle_sigchld(int sig) {
     (void)sig; // Suppress unused parameter warning
@@ -63,57 +72,77 @@ void handle_sigchld(int sig) {
         // Reap all terminated child processes
     }
 }
-
 void sendHTML(int sock, char *file) {
-    size_t read; //size_t è un unsigned integer che viene usato com return type di size of e che sarà quindi sempre positivo
+    size_t read; 
     char buffer[BUFFER_SIZE] = {0};
-    char* header;
-if((access(file,R_OK))==0) {
-    if(strcmp(file, "root/favicon.ico") == 0) {
-        file = "public/favicon.ico";
+    // 1. Inizializziamo SEMPRE header a NULL per sicurezza
+    char* header = NULL; 
+
+    if ((access(file, R_OK)) == 0) {
+        if (strcmp(file, "root/favicon.ico") == 0) {
+            file = "public/favicon.ico";
+            header = "HTTP/1.1 200 OK\r\nContent-Type: image/x-icon\r\n"; // Header corretto per favicon
+        }
+        else {
+            char root_slash[32];
+            snprintf(root_slash, sizeof(root_slash), "%s/", ROOT);
+            if (strcmp(file, root_slash) == 0) {
+                file = "root/index.html"; 
+            }
+            // Qualsiasi file valido esistente (sia index che altri file richiesti da wrk)
+            header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";   
+        }
+    } else {
+        if (errno == ENOENT) {
+            file = "public/404.html";
+            header = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n";
+        } 
+        else if (errno == EACCES) {
+            file = "public/403.html";
+            header = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\n";
+        } else {
+            // Fallback generico per altri errori di sistema (es. troppi file aperti)
+            file = "public/404.html"; 
+            header = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n";
+        }
     }
-    if(strcmp(file, string_append(ROOT,"/")) == 0) {
-        file = string_append(ROOT, "/index.html");
+    
+    // Controlliamo la dimensione del file reale che andremo a servire
+    struct stat st;
+    if (stat(file, &st) < 0) {
+        st.st_size = 0; 
     }
 
+    // Composizione sicura dell'header HTTP
+    char header_full[512]; 
+    snprintf(header_full, sizeof(header_full), "%sConnection: close\r\nContent-Length: %ld\r\n\r\n", header, st.st_size);
     
-     header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
-    
-} else {
-    if(errno == ENOENT) {
-        file = "public/404.html";
-        header = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
+    // Invio dell'header
+    send(sock, header_full, strlen(header_full), 0);
 
-    } 
-    else if(errno ==  EACCES) {
-        file = "public/403.html";
-         header = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/html\r\n\r\n"; //http header to signal html
-
-    }
-    
-}
-    send(sock, header, strlen(header),0);
+    // Invio del file corpo
     FILE *html = fopen(file, "r");
     if (!html) return;
 
-    while ((read = fread(buffer,sizeof(buffer[0]), BUFFER_SIZE, html)) > 0) {
-        send(sock, buffer, read, 0);
+    size_t bytes_read = 0; 
+    while ((bytes_read = fread(buffer, sizeof(buffer[0]), BUFFER_SIZE, html)) > 0) {
+        send(sock, buffer, bytes_read, 0);
     }
-  
     fclose(html);
 }
 
 void start_worker(int sockfd) {
-    while (1)
-    {
+    while (1) {
         struct sockaddr_in clientAddr;
-        socklen_t clientlen = sizeof clientAddr;
-    	int clientSocket;
-        if((clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientlen)) < 0) {
-
+        socklen_t clientlen = sizeof(clientAddr);
+    	int clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientlen);
+        
+        if (clientSocket < 0) {
+            if (errno == EINTR) continue;
             perror("could not accept client");
             continue;
         }
+<<<<<<< HEAD
 	        char recBuf[BUFFER_SIZE] = {0};
 	        recv(clientSocket, recBuf, BUFFER_SIZE, 0);
             char* recBuf_copy = malloc(sizeof(recBuf));
@@ -151,6 +180,49 @@ void start_worker(int sockfd) {
                  close(clientSocket);
              free(finalroute);
            
+=======
+
+        char recBuf[BUFFER_SIZE] = {0};
+        int received = recv(clientSocket, recBuf, BUFFER_SIZE - 1, 0);
+        if (received <= 0) {
+            close(clientSocket);
+            continue;
+        }
+
+        char* recBuf_copy = strdup(recBuf);
+        if (!recBuf_copy) {
+            close(clientSocket);
+            continue;
+        }
+
+        char* method = strtok(recBuf_copy, " ");
+        char* route = strtok(NULL, " ");
+        
+        if (method && route) {
+            char* finalroute = string_append(ROOT, route);
+            
+            if (strcmp(method, "GET") == 0) {
+                sendHTML(clientSocket, finalroute);
+            } else if (strcmp(method, "PUT") == 0) {
+                strtok(NULL, " \n"); // version
+                strtok(NULL, "\n"); strtok(NULL, "\n"); strtok(NULL, "\n");
+                strtok(NULL, " ");
+                char* content = strtok(NULL, "\n");
+                
+                const char *header_end_marker = "\r\n\r\n";
+                char *body_start = strstr(recBuf, header_end_marker);
+                if (body_start) body_start += 4;
+                
+                resolve_put(body_start, content);
+            }
+            free(finalroute);
+        }
+
+        // RILASCIO CORRETTO RISORSE
+        free(recBuf_copy);
+        close(clientSocket); // Manda il segnale di chiusura corretto a wrk
+        // RIMOSSO il close(sockfd) distruttivo da qui
+>>>>>>> 80e8bbb (Add main binary and JSON response file; update server configuration and request handling)
     }
 }
 int main()
@@ -193,6 +265,7 @@ int main()
         pid_t pid = fork();
         if(pid==0) {
             start_worker(sockfd);
+            
             exit(0);
         }
     }
